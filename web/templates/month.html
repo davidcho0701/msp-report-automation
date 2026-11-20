@@ -118,6 +118,16 @@
         <form class="inl" method="post" action="{{ url_for('send_direct', cid=cid, sm=sm) }}" onsubmit="return confirm('승인과 발송을 한 번에 처리합니다.\n\n' + '{{ real_confirm }}')">
           <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="confirm" value="yes">
           <button {{ 'disabled' if locked or not run.pdf_path or stale or sendable_direct }}>승인 없이 바로 발송</button></form>
+        {% else %}
+        <details class="more"><summary>더보기</summary>
+          <form method="post" action="{{ url_for('reset_sent', cid=cid, sm=sm) }}" class="acts"
+                onsubmit="return confirm('이미 고객사로 발송된 기록을 초기화합니다.\n\n초기화하면 이 보고서를 다시 실제로 발송할 수 있게 되며, 승인도 해제됩니다. (발송 이력은 남습니다)\n\n계속할까요?')">
+            <input type="hidden" name="csrf" value="{{ csrf }}">
+            <input type="text" name="confirm_text" placeholder="'초기화' 입력" autocomplete="off" style="width:110px">
+            <button>발송 상태 초기화</button>
+            <span class="small muted">시험·재발송용</span>
+          </form>
+        </details>
         {% endif %}
       </div>
       <div class="small muted" style="margin-top:4px">{{ cm_from or '운영자 미설정' }} &rarr; {{ cm_to or '받는 사람 미설정' }}</div>
@@ -239,9 +249,9 @@
     <h3>메일 발송 이력</h3>
     <table class="grid">
       <tr><th style="width:150px">일시</th><th style="width:70px">구분</th><th style="width:70px">방식</th><th style="width:70px">결과</th><th class="l">받는 사람</th></tr>
-      {% for m in mails %}<tr><td class="small">{{ m.at }}</td><td>{{ {'review':'점검','customer':'고객사','notify':'알림','test':'시험'}.get(m.kind, m.kind) }}</td>
-        <td>{{ '실제' if m.mode == 'live' else '테스트' }}</td>
-        <td>{{ tag({'sent':'ok','saved':'mute','failed':'err'}.get(m.status,'mute'), {'sent':'발송','saved':'저장','failed':'실패'}.get(m.status, m.status)) }}</td>
+      {% for m in mails %}<tr><td class="small">{{ m.at }}</td><td>{{ {'review':'점검','customer':'고객사','notify':'알림','test':'시험','reset':'초기화'}.get(m.kind, m.kind) }}</td>
+        <td>{{ '실제' if m.mode == 'live' else ('-' if m.mode == '-' else '테스트') }}</td>
+        <td>{{ tag({'sent':'ok','saved':'mute','failed':'err','reset':'warn'}.get(m.status,'mute'), {'sent':'발송','saved':'저장','failed':'실패','reset':'초기화'}.get(m.status, m.status)) }}</td>
         <td class="l small" title="{{ m.error or m.path or '' }}">{{ m.recipients }}{% if m.error %} <span style="color:var(--err)">{{ m.error[:80] }}</span>{% endif %}</td></tr>
       {% else %}<tr><td colspan="5" class="muted">이력이 없습니다.</td></tr>{% endfor %}
     </table>

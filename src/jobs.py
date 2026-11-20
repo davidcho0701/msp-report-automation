@@ -14,7 +14,7 @@ import threading
 import traceback
 from datetime import datetime, timedelta
 
-from . import db, pipeline, snapshot
+from . import db, mailer, pipeline, snapshot
 from .config import load_config, load_customers, now
 
 _locks: dict[str, threading.Lock] = {}
@@ -82,8 +82,17 @@ def _throttled(key: tuple, t: datetime) -> bool:
     return False
 
 
-def _customer_mail_today(cid: str, report_month: str, today: str) -> bool:
-    return any(m["kind"] == "customer" and m["at"].startswith(today) for m in db.list_mail(cid, report_month))
+def _auto_attempted_today(cid: str, report_month: str, today: str, mode: str) -> bool:
+    """오늘 이미 같은 방식(dryrun/live)으로 자동 발송을 시도했는지.
+
+    - 마지막 '발송 상태 초기화' 이전 기록은 세지 않는다.
+    - 다른 방식의 기록은 세지 않는다 (dry-run 시도 후 live 로 바꾸면 live 를 한 번 시도할 수 있음).
+    - 실패한 시도도 센다 (하루 한 번만 시도).
+    """
+    rows = db.list_mail(cid, report_month)
+    last_reset = max((m["id"] for m in rows if m["kind"] == "reset"), default=0)
+    return any(m["kind"] == "customer" and m["mode"] == mode and m["id"] > last_reset
+               and m["at"].startswith(today) for m in rows)
 
 
 def tick(t: datetime | None = None) -> None:
@@ -117,7 +126,8 @@ def tick(t: datetime | None = None) -> None:
 
         # 3) 발송일
         if today == sc.send_date and _due(t, st["send_time"]) and int(st["auto_send"]) \
-                and run.get("status") != "sent" and not _customer_mail_today(cid, rm, today.isoformat()) \
+                and run.get("status") != "sent" \
+                and not _auto_attempted_today(cid, rm, today.isoformat(), mailer.mail_mode("customer")) \
                 and not _throttled((cid, "send", rm, today), t):
             problems = pipeline.check_sendable(cid, rm)
             if not problems:

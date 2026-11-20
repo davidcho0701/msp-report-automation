@@ -261,6 +261,20 @@ def send_direct(cid, sm):
     return _sync(cid, sm, pipeline.approve_and_send, cid, rm, by, True, ok="승인 후 고객사에 발송했습니다")
 
 
+@app.post("/c/<cid>/<sm>/reset-sent")
+def reset_sent(cid, sm):
+    """발송 완료 상태를 초기화 (시험·재발송용). 확인 칸에 '초기화'를 입력해야 한다."""
+    _check_cid(cid)
+    sm = _check_month(sm)
+    rm = schedule.report_month_for(sm)
+    if request.form.get("confirm_text", "").strip() != "초기화":
+        flash("확인 문구가 일치하지 않아 초기화하지 않았습니다. 확인 칸에 '초기화'를 입력하세요.", "error")
+        return redirect(url_for("month_view", cid=cid, sm=sm))
+    by = db.get_global("operator_name") or "운영자"
+    return _sync(cid, sm, pipeline.reset_sent, cid, rm, by,
+                 ok="발송 상태를 초기화했습니다. 다시 승인하면 발송할 수 있습니다")
+
+
 @app.post("/c/<cid>/<sm>/support")
 def support_add(cid, sm):
     _check_cid(cid)

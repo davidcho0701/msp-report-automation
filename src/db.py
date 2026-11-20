@@ -337,9 +337,14 @@ def list_mail(cid: str, report_month: str) -> list[dict]:
 
 
 def customer_already_sent(cid: str, report_month: str) -> bool:
+    """마지막 '발송 상태 초기화'(kind='reset') 이후에 실제 발송 기록이 있는지. 초기화 전 이력은 남기되 중복 판정에서 제외."""
     with connect() as con:
+        last_reset = con.execute(
+            "SELECT COALESCE(MAX(id), 0) AS rid FROM mail_log WHERE customer_id=? AND report_month=? AND kind='reset'",
+            (cid, report_month)).fetchone()["rid"]
         r = con.execute("SELECT 1 FROM mail_log WHERE customer_id=? AND report_month=? AND kind='customer' "
-                        "AND mode='live' AND status='sent' LIMIT 1", (cid, report_month)).fetchone()
+                        "AND mode='live' AND status='sent' AND id>? LIMIT 1",
+                        (cid, report_month, last_reset)).fetchone()
     return r is not None
 
 

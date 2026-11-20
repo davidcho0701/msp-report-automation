@@ -284,6 +284,22 @@ def check_sendable(cid: str, report_month: str) -> list[str]:
     return problems
 
 
+def reset_sent(cid: str, report_month: str, by: str = "운영자") -> None:
+    """'발송 완료'를 초기화해 같은 달 보고서를 다시 보낼 수 있게 한다 (시험·재발송용).
+
+    - 발송 이력(mail_log)은 지우지 않고 'reset' 기록을 남긴다. 중복 판정은 마지막 초기화 이후만 본다.
+    - 승인도 해제된다. 다시 승인해야 발송할 수 있으므로 자동 발송이 곧바로 재발송하지 않는다.
+    """
+    run = db.get_run(cid, report_month)
+    if run.get("status") != "sent" and not db.customer_already_sent(cid, report_month):
+        raise PipelineError("발송 완료 상태가 아닙니다")
+    db.log_mail(cid, report_month, "reset", "-", [], f"발송 상태 초기화 ({by})", "reset")
+    db.update_run(cid, report_month, status="draft" if run.get("draft_at") else "none",
+                  sent_at=None, approved_at=None, approved_by=None, approved_pdf=None,
+                  approved_sha256=None, unapproved_notified_at=None)
+    db.log_job(cid, "reset-sent", "ok", f"{report_month} 발송 상태 초기화 ({by}); 이전 발송 이력은 유지")
+
+
 def approve_and_send(cid: str, report_month: str, by: str, live: bool = False) -> str:
     """운영자가 화면에서 '승인하고 바로 발송'을 눌렀을 때: 점검 메일/별도 승인 단계 없이 한 번에.
 

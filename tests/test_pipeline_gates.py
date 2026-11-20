@@ -151,6 +151,38 @@ def test_approve_and_send_live_flag(env, monkeypatch):
     assert db.get_run("skmns", RM)["status"] == "sent"
 
 
+def test_reset_sent_allows_resend_and_keeps_history(env, monkeypatch):
+    _live(monkeypatch)
+    with mock.patch("smtplib.SMTP") as smtp:
+        send = smtp.return_value.__enter__.return_value.send_message
+        pipeline.approve("skmns", RM, "t")
+        pipeline.send_customer("skmns", RM, live=True)
+        assert db.get_run("skmns", RM)["status"] == "sent"
+        with pytest.raises(pipeline.PipelineError, match="이미 발송"):
+            pipeline.send_customer("skmns", RM, live=True)
+
+        pipeline.reset_sent("skmns", RM, "tester")
+        run = db.get_run("skmns", RM)
+        assert run["status"] == "draft" and not run["sent_at"] and not run["approved_at"]
+        assert not db.customer_already_sent("skmns", RM)
+        with pytest.raises(pipeline.PipelineError, match="미승인"):  # 승인 해제 → 자동 재발송 불가
+            pipeline.send_customer("skmns", RM, live=True)
+
+        pipeline.approve("skmns", RM, "t")
+        assert pipeline.send_customer("skmns", RM, live=True) == "live"
+        assert send.call_count == 2
+        # 재발송 후에는 다시 중복 방지
+        with pytest.raises(pipeline.PipelineError, match="이미 발송"):
+            pipeline.send_customer("skmns", RM, live=True)
+    kinds = [(m["kind"], m["status"]) for m in db.list_mail("skmns", RM)]
+    assert kinds.count(("customer", "sent")) == 2 and ("reset", "reset") in kinds  # 이력 보존
+
+
+def test_reset_sent_requires_sent_state(env):
+    with pytest.raises(pipeline.PipelineError, match="발송 완료 상태가 아닙니다"):
+        pipeline.reset_sent("skmns", RM, "t")
+
+
 def test_customer_mail_from_operator_to_customer(env):
     import email
     from email import policy
