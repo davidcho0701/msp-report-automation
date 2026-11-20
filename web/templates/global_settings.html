@@ -1,51 +1,52 @@
 {% extends "base.html" %}
-{% block title %}전체 설정{% endblock %}
+{% from "_macros.html" import tag %}
+{% block title %}환경 설정{% endblock %}
 {% block body %}
-<h1>전체 설정</h1>
-<div class="grid2">
-  <div class="card">
-    <h2>메일 · 운영자</h2>
-    <form method="post">
-      <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="action" value="general">
-      <div class="field"><label>보내는 사람 주소</label><input type="email" name="mail_from" value="{{ g.mail_from }}" style="width:100%">
-        <div class="hint">비우면 .env 의 SMTP_USER 사용</div></div>
-      <div class="field"><label>보내는 사람 이름</label><input type="text" name="mail_from_name" value="{{ g.mail_from_name }}" style="width:100%"></div>
-      <div class="field"><label>기본 승인자 이름</label><input type="text" name="operator_name" value="{{ g.operator_name }}"></div>
-      <div class="field"><label>이 화면 주소 (점검 메일 링크용)</label><input type="text" name="app_url" value="{{ g.app_url }}" style="width:100%"></div>
-      <button class="primary">저장</button>
-    </form>
-  </div>
-  <div class="card">
-    <h2>환경 상태 <span class="small muted">(.env — 값은 표시하지 않음)</span></h2>
-    <table class="t">
-      {% for k, v in env_status.items() %}<tr><td class="l">{{ k }}</td><td>{% if v %}<span class="badge b-ok">설정됨</span>{% else %}<span class="badge b-err">없음</span>{% endif %}</td></tr>{% endfor %}
-      <tr><td class="l">운영자 메일 모드 (MAIL_MODE_OPERATOR)</td><td><span class="badge {{ 'b-live' if mode_operator=='live' else 'b-dry' }}">{{ mode_operator }}</span></td></tr>
-      <tr><td class="l">고객사 메일 모드 (MAIL_MODE_CUSTOMER)</td><td><span class="badge {{ 'b-live' if mode_customer=='live' else 'b-dry' }}">{{ mode_customer }}</span></td></tr>
+<div class="pagebar"><div><h1>환경 설정</h1></div></div>
+
+<div class="panel">
+  <div class="ph">메일</div>
+  <form method="post">
+    <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="action" value="general">
+    <table class="form">
+      <tr><th>시스템 메일 보내는 사람</th><td><input type="email" name="mail_from" value="{{ g.mail_from }}">
+        <div class="hint">점검 메일·알림의 보내는 주소. 비우면 운영자 이메일(Outlook 방식) 또는 .env 의 SMTP_USER</div></td></tr>
+      <tr><th>발신자 표시 이름</th><td><input type="text" name="mail_from_name" value="{{ g.mail_from_name }}">
+        <div class="hint">SMTP 방식에서만 적용 (Outlook 방식은 Outlook 계정 이름)</div></td></tr>
+      <tr><th>기본 승인자 이름</th><td><input type="text" name="operator_name" value="{{ g.operator_name }}"></td></tr>
+      <tr><th>이 화면 주소</th><td><input type="text" name="app_url" value="{{ g.app_url }}"><div class="hint">점검 메일에 들어가는 링크 주소</div></td></tr>
     </table>
-    <p class="small muted">비밀정보와 메일 모드는 보안상 화면에서 바꿀 수 없습니다. .env 수정 후 프로그램을 다시 시작하세요.</p>
-  </div>
+    <div class="pb"><button class="primary">저장</button></div>
+  </form>
+</div>
+
+<div class="panel">
+  <div class="ph">환경 상태<span class="aux">.env · 보안상 화면에서 변경할 수 없고, 수정 후 프로그램을 다시 시작해야 반영됩니다</span></div>
+  <table class="form">
+    {% for k, v in env_status.items() %}<tr><th style="width:360px">{{ k }}</th><td>{% if v %}{{ tag('ok', '설정됨') }}{% else %}{{ tag('err', '없음') }}{% endif %}</td></tr>{% endfor %}
+    <tr><th>점검 메일 (MAIL_MODE_OPERATOR)</th><td>{{ tag('ok' if mode_operator == 'live' else 'warn', '실제 발송' if mode_operator == 'live' else '테스트 모드 (파일 저장)') }}</td></tr>
+    <tr><th>고객사 자동 발송 (MAIL_MODE_CUSTOMER)</th><td>{{ tag('ok' if mode_customer == 'live' else 'warn', '실제 발송' if mode_customer == 'live' else '테스트 모드 (파일 저장)') }}</td></tr>
+    <tr><th>고객사 수동 발송 ('지금 발송')</th><td>{{ tag('ok', '항상 실제 발송') }}</td></tr>
+  </table>
 </div>
 
 <div class="grid2">
-  <div class="card">
-    <h2>추가 휴무일</h2>
-    <p class="small muted">공휴일 목록에 없는 회사 휴무일·임시공휴일을 등록하면 자동 일정 계산에 반영됩니다.</p>
-    <table class="t">
-      <tr><th>날짜</th><th>사유</th><th></th></tr>
-      {% for d, n in extra.items() %}<tr><td>{{ d }}</td><td>{{ n }}</td><td>
-        <form class="inline" method="post"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="action" value="holiday_del">
-          <input type="hidden" name="date" value="{{ d }}"><button>삭제</button></form></td></tr>
-      {% else %}<tr><td colspan="3" class="muted">없음</td></tr>{% endfor %}
+  <div class="panel">
+    <div class="ph">추가 휴무일<span class="aux">발송일 자동 계산에 반영</span></div>
+    <table class="grid">
+      {% for d, n in extra.items() %}<tr><td style="width:120px">{{ d }}</td><td class="l">{{ n }}</td><td style="width:70px">
+        <form method="post"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="action" value="holiday_del"><input type="hidden" name="date" value="{{ d }}"><button>삭제</button></form></td></tr>
+      {% else %}<tr><td colspan="3" class="muted">등록된 휴무일이 없습니다.</td></tr>{% endfor %}
     </table>
-    <form method="post" class="row" style="margin-top:10px">
+    <form method="post" class="pb acts">
       <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="action" value="holiday_add">
-      <input type="date" name="date" required><input type="text" name="name" placeholder="사유"><button>추가</button>
+      <input type="date" name="date" required><input type="text" name="name" placeholder="사유" style="width:180px"><button class="primary">추가</button>
     </form>
   </div>
-  <div class="card">
-    <h2>공휴일 (자동, 대체공휴일 포함)</h2>
-    <table class="t">
-      {% for d, n in kr_holidays %}<tr><td>{{ d }} ({{ '월화수목금토일'[d.weekday()] }})</td><td class="l">{{ n }}</td></tr>{% endfor %}
+  <div class="panel">
+    <div class="ph">공휴일<span class="aux">자동 · 대체공휴일 포함</span></div>
+    <table class="grid">
+      {% for d, n in kr_holidays %}<tr><td style="width:150px">{{ d }} ({{ '월화수목금토일'[d.weekday()] }})</td><td class="l">{{ n }}</td></tr>{% endfor %}
     </table>
   </div>
 </div>

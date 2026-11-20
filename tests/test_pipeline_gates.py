@@ -121,6 +121,36 @@ def test_direct_send_blocked_without_recipient_or_when_stale(env):
         pipeline.approve_and_send("skmns", RM, "t")
 
 
+def test_manual_live_flag_sends_even_when_env_mode_is_dryrun(env, monkeypatch):
+    monkeypatch.setenv("SMTP_HOST", "smtp.example.com")
+    monkeypatch.setenv("SMTP_USER", "u")
+    monkeypatch.setenv("SMTP_PASSWORD", "p")
+    assert mailer.mail_mode("customer") == "dryrun"  # .env 는 dry-run
+    pipeline.approve("skmns", RM, "t")
+    with mock.patch("smtplib.SMTP") as smtp:
+        assert pipeline.send_customer("skmns", RM, live=True) == "live"
+        assert smtp.return_value.__enter__.return_value.send_message.call_count == 1
+    assert db.get_run("skmns", RM)["status"] == "sent"
+
+
+def test_automatic_path_still_follows_env_mode(env):
+    pipeline.approve("skmns", RM, "t")
+    with mock.patch("smtplib.SMTP") as smtp:
+        assert pipeline.send_customer("skmns", RM) == "dryrun"  # 스케줄러 호출 형태 (live 미지정)
+        smtp.assert_not_called()
+    assert db.get_run("skmns", RM)["status"] == "approved"
+
+
+def test_approve_and_send_live_flag(env, monkeypatch):
+    monkeypatch.setenv("SMTP_HOST", "smtp.example.com")
+    monkeypatch.setenv("SMTP_USER", "u")
+    monkeypatch.setenv("SMTP_PASSWORD", "p")
+    with mock.patch("smtplib.SMTP") as smtp:
+        assert pipeline.approve_and_send("skmns", RM, "t", live=True) == "live"
+        assert smtp.return_value.__enter__.return_value.send_message.call_count == 1
+    assert db.get_run("skmns", RM)["status"] == "sent"
+
+
 def test_customer_mail_from_operator_to_customer(env):
     import email
     from email import policy

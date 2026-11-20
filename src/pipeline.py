@@ -284,7 +284,7 @@ def check_sendable(cid: str, report_month: str) -> list[str]:
     return problems
 
 
-def approve_and_send(cid: str, report_month: str, by: str) -> str:
+def approve_and_send(cid: str, report_month: str, by: str, live: bool = False) -> str:
     """운영자가 화면에서 '승인하고 바로 발송'을 눌렀을 때: 점검 메일/별도 승인 단계 없이 한 번에.
 
     - 초안(PDF)이 있어야 하고, 초안 이후 입력이 바뀌었으면(stale) 막힌다. 이미 발송했으면 막힌다.
@@ -295,13 +295,14 @@ def approve_and_send(cid: str, report_month: str, by: str) -> str:
         raise PipelineError("이미 발송됨")
     approve(cid, report_month, by)
     try:
-        return send_customer(cid, report_month)
+        return send_customer(cid, report_month, live=live)
     except Exception:
         unapprove(cid, report_month)
         raise
 
 
-def send_customer(cid: str, report_month: str) -> str:
+def send_customer(cid: str, report_month: str, live: bool = False) -> str:
+    """승인된 보고서를 고객사로 발송. live=True(운영자 수동 발송)면 .env 모드와 무관하게 실제 발송."""
     problems = check_sendable(cid, report_month)
     if problems:
         raise PipelineError("발송 불가: " + "; ".join(problems))
@@ -313,9 +314,10 @@ def send_customer(cid: str, report_month: str) -> str:
                                subject=cm["subject"], body=cm["body"], attachments=[Path(run["approved_pdf"])])
     rcpts = cm["to"] + cm["cc"]
     try:
-        mode, path = mailer.deliver(msg, "customer", month_dir(cid, report_month, "outbox"))
+        mode, path = mailer.deliver(msg, "customer", month_dir(cid, report_month, "outbox"), live=live)
     except Exception as e:
-        db.log_mail(cid, report_month, "customer", mailer.mail_mode("customer"), rcpts, cm["subject"], "failed", error=str(e))
+        db.log_mail(cid, report_month, "customer", "live" if live else mailer.mail_mode("customer"),
+                    rcpts, cm["subject"], "failed", error=str(e))
         raise
     if mode == "live":
         db.log_mail(cid, report_month, "customer", mode, rcpts, cm["subject"], "sent", path)

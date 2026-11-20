@@ -1,204 +1,206 @@
 {% extends "base.html" %}
-{% from "_macros.html" import level_badge, num %}
+{% from "_macros.html" import tag, lvtag, num %}
 {% block title %}{{ ccfg.name }} {{ sm }} 발송{% endblock %}
 {% block head %}{% if busy %}<meta http-equiv="refresh" content="5">{% endif %}{% endblock %}
 {% block body %}
 {% set ym = rm.split('-') %}
-{% set sym = sm.split('-') %}
 {% set errors = issues|selectattr('level','equalto','error')|list %}
 {% set warns = issues|selectattr('level','equalto','warn')|list %}
 {% set infos = issues|selectattr('level','equalto','info')|list %}
-{% set locked = busy or run.status == 'sent' %}
+{% set sent = run.status == 'sent' %}
+{% set locked = busy or sent %}
+{% set cm_from = cm.from if cm else '' %}
+{% set cm_to = cm.to|join(', ') if cm else '' %}
+{% set real_confirm = '고객사로 실제 메일을 발송합니다.\\n\\n보내는 사람: ' ~ (cm_from or '(미설정)') ~ '\\n받는 사람: ' ~ (cm_to or '(미설정)') ~ '\\n첨부: ' ~ ym[0] ~ '년 ' ~ (ym[1]|int) ~ '월 보고서(PDF)\\n\\n발송 후에는 취소할 수 없습니다. 계속할까요?' %}
 
-<!-- 머리글 -->
-<div class="pagehead">
-  <h1>{{ ccfg.name }}</h1>
-  <div class="monthnav">
-    <a class="navbtn" href="{{ url_for('month_view', cid=cid, sm=prev_sm) }}" title="이전 달">‹</a>
-    <div class="monthlabel"><b>{{ sym[1]|int }}월 발송</b><span>{{ ym[0] }}년 {{ ym[1]|int }}월 보고서</span></div>
-    <a class="navbtn" href="{{ url_for('month_view', cid=cid, sm=next_sm) }}" title="다음 달">›</a>
+<div class="pagebar">
+  <div>
+    <div class="crumb"><a href="{{ url_for('dashboard') }}">고객사</a> / {{ ccfg.name }}</div>
+    <h1>{{ ccfg.name }}<span class="sub">{{ ym[0] }}년 {{ ym[1]|int }}월 보고서</span></h1>
   </div>
-  <a class="link-muted" href="{{ url_for('customer_settings', cid=cid) }}">⚙ 설정</a>
+  <div class="ctrl">
+    <a class="btn" href="{{ url_for('month_view', cid=cid, sm=prev_sm) }}">&lsaquo; 이전</a>
+    <span class="cur">{{ sm }} 발송</span>
+    <a class="btn" href="{{ url_for('month_view', cid=cid, sm=next_sm) }}">다음 &rsaquo;</a>
+    <a class="link" href="{{ url_for('customer_settings', cid=cid) }}">설정</a>
+  </div>
 </div>
 
-{% if busy %}<div class="banner">⏳ 작업 중입니다… ({{ busy }}) 자동으로 새로고침됩니다.</div>{% endif %}
+<!-- 일정 (한 줄 요약, 눌러서 변경) -->
+<details class="sched">
+  <summary>
+    <span class="muted">점검</span><span><b>{{ fmt_day(sc.review_date) }}</b> {{ st.review_time }}</span>
+    <span class="muted">발송</span><span><b>{{ fmt_day(sc.send_date) }}</b> {{ st.send_time }}</span>
+    <span class="muted">{% if sc.manual %}직접 지정{% else %}자동{% endif %}{% if not st.auto_send|int %} · 자동 발송 꺼짐{% endif %}</span>
+    <span class="link">일정 확인·변경</span>
+  </summary>
+  <div class="schedbody">
+    <div>
+      <table class="mcal">
+        <tr>{% for w in '월화수목금토일' %}<th>{{ w }}</th>{% endfor %}</tr>
+        {% for week in calendar %}<tr>
+          {% for d in week %}
+            {% if d is none %}<td></td>
+            {% else %}<td class="{{ 'we' if d.weekend }} {{ 'hol' if d.holiday }} {{ 'today' if d.date == today }} {{ 'is-review' if d.date == sc.review_date }} {{ 'is-send' if d.date == sc.send_date }}" title="{{ d.holiday or '' }}">{{ d.day }}</td>{% endif %}
+          {% endfor %}</tr>{% endfor %}
+      </table>
+      <div class="legend"><i style="background:#5d7fa6"></i>점검일<i style="background:var(--accent)"></i>발송일<i style="background:#fbf3f2;border:1px solid #e0b3ae"></i>공휴일</div>
+    </div>
+    <form method="post" action="{{ url_for('save_schedule', cid=cid, sm=sm) }}">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <div class="small muted" style="margin-bottom:8px">{{ sc.auto_reason }}{% if sc.note %}<br>사유: {{ sc.note }}{% endif %}</div>
+      <table class="form">
+        <tr><th style="width:70px">점검일</th><td><input type="date" name="review_date" value="{{ sc.review_date.isoformat() if sc.manual else '' }}"></td></tr>
+        <tr><th>발송일</th><td><input type="date" name="send_date" value="{{ sc.send_date.isoformat() if sc.manual else '' }}"></td></tr>
+        <tr><th>사유</th><td><input type="text" name="note" value="{{ sc.note }}"></td></tr>
+      </table>
+      <div class="hint">비워 두면 자동 계산값을 씁니다. 발송일만 바꾸면 점검일은 그 전 영업일로 맞춰집니다.</div>
+      <div class="acts" style="margin-top:10px"><button class="primary" name="action" value="save">저장</button>
+        {% if sc.manual %}<button name="action" value="reset">자동으로 되돌리기</button>{% endif %}</div>
+    </form>
+  </div>
+</details>
 
-<div class="hero">
-  <!-- 진행 + 지금 할 일 -->
-  <section class="card">
-    {% set step = {'none':0,'draft':1,'approved':2,'sent':3}.get(run.status or 'none', 0) %}
-    <ol class="stepper">
-      {% for label in ['보고서 생성', '검토', '승인', '발송'] %}
-      {% set i = loop.index0 %}
-      <li class="{{ 'done' if i < step or (i == 0 and run.draft_at) or (i == 3 and run.status == 'sent') else ('now' if i == step else '') }}">
-        <span class="dot">{{ '✓' if i < step or (i == 3 and run.status == 'sent') or (i == 0 and run.draft_at) else loop.index }}</span>{{ label }}
-      </li>
-      {% endfor %}
-    </ol>
+<!-- 진행 -->
+<div class="panel">
+  {% if busy %}<div class="statusline st-todo"><b>작업 중</b><span class="muted">{{ busy }} · 완료되면 자동으로 갱신됩니다</span></div>
+  {% else %}<div class="statusline st-{{ {'todo':'todo','ok':'ok','warn':'warn'}.get(na.tone,'todo') }}"><b>{{ na.title }}</b><span class="muted">{{ na.desc }}</span></div>{% endif %}
 
-    <div class="todo tone-{{ na.tone }}">
-      <div class="todo-title">{{ na.title }}</div>
-      <div class="todo-desc">{{ na.desc }}</div>
-      <div class="actions">
-        {% if na.key == 'make' %}
-          <form method="post" action="{{ url_for('draft', cid=cid, sm=sm) }}"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="recollect" value="1">
-            <button class="primary big" {{ 'disabled' if locked }}>보고서 만들기</button></form>
-        {% elif na.key == 'rebuild' %}
-          <form method="post" action="{{ url_for('draft', cid=cid, sm=sm) }}"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="recollect" value="0">
-            <button class="primary big" {{ 'disabled' if locked }}>다시 만들기</button></form>
-        {% elif na.key == 'approve' %}
-          <form method="post" action="{{ url_for('approve', cid=cid, sm=sm) }}"
-                onsubmit="return confirm('승인하면 {{ fmt_day(sc.send_date) }} {{ st.send_time }}에 고객사로 발송됩니다.{% if errors %}\n\n확인 필요 항목(오류 {{ errors|length }}건)이 남아 있습니다. 그래도 승인할까요?{% endif %}')">
-            <input type="hidden" name="csrf" value="{{ csrf }}">
-            <button class="primary big" {{ 'disabled' if locked or not run.pdf_path }}>승인하기</button></form>
-          <form method="post" action="{{ url_for('send_direct', cid=cid, sm=sm) }}"
-                onsubmit="return confirm('승인 절차 없이 지금 바로 고객사로 발송합니다.\n\n받는 사람: {{ cm.to|join(', ') if cm and cm.to else '(미설정)' }}\n방식: {{ '실제 발송' if mode_customer == 'live' else 'dry-run (파일로만 저장)' }}\n\n계속할까요?')">
-            <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="confirm" value="yes">
-            <button {{ 'disabled' if locked or not run.pdf_path or sendable_direct }}>승인하고 바로 발송</button></form>
-        {% elif na.key in ('blocked', 'wait', 'manual') %}
-          <form method="post" action="{{ url_for('send_now', cid=cid, sm=sm) }}"
-                onsubmit="return confirm('지금 고객사로 발송합니다.\n({{ '실제 발송' if mode_customer == 'live' else 'dry-run: 파일로만 저장' }})')">
-            <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="confirm" value="yes">
-            <button class="{{ 'primary big' if na.key == 'manual' else 'big' }}" {{ 'disabled' if busy or sendable }}>지금 발송</button></form>
-          <form method="post" action="{{ url_for('unapprove', cid=cid, sm=sm) }}"><input type="hidden" name="csrf" value="{{ csrf }}">
-            <button class="ghost">승인 취소</button></form>
+  <table class="grid">
+    <tr><th class="l" style="width:150px">단계</th><th class="l" style="width:230px">상태</th><th class="l">작업</th></tr>
+
+    <tr>
+      <td class="l"><b>1. 보고서 생성</b></td>
+      <td class="l">{% if run.draft_at %}{{ tag('ok', '생성됨') }}{% else %}{{ tag('mute', '아직 안 만듦') }}{% endif %}
+        <div class="small muted">{{ run.draft_at or '' }}{% if stale %}<span style="color:var(--warn)"> · 입력이 바뀌어 재생성 필요</span>{% endif %}</div></td>
+      <td class="l"><div class="acts">
+        <form class="inl" method="post" action="{{ url_for('draft', cid=cid, sm=sm) }}"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="recollect" value="{{ '0' if stale else '1' }}">
+          <button class="primary" {{ 'disabled' if locked }}>{{ '보고서 생성' if not run.draft_at else ('다시 만들기' if stale else '재생성') }}</button></form>
+        {% if run.draft_at and not sent %}
+        <details class="more"><summary>더보기</summary>
+          <div class="acts">
+            {% if not stale %}<form class="inl" method="post" action="{{ url_for('draft', cid=cid, sm=sm) }}"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="recollect" value="0"><button {{ 'disabled' if locked }}>재수집 없이 재생성</button></form>{% else %}
+            <form class="inl" method="post" action="{{ url_for('draft', cid=cid, sm=sm) }}"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="recollect" value="1"><button {{ 'disabled' if locked }}>NCP 재수집 후 재생성</button></form>{% endif %}
+            <form class="inl" method="post" action="{{ url_for('review_mail', cid=cid, sm=sm) }}"><input type="hidden" name="csrf" value="{{ csrf }}"><button {{ 'disabled' if busy }}>점검 메일 발송</button></form>
+            <span class="small muted">점검 메일: {{ run.review_mail_at or ('사용 안 함' if not st.review_mail_enabled|int else '미발송') }}</span>
+          </div>
+        </details>
         {% endif %}
-        {% for f in files %}<a class="ghost btn" href="{{ url_for('download', cid=cid, sm=sm, key=f.key) }}">⬇ {{ f.label }}</a>{% endfor %}
-      </div>
-    </div>
+      </div></td>
+    </tr>
 
-    {% if run.draft_at and run.status != 'sent' %}
-    <details class="more">
-      <summary>기타 작업</summary>
-      <div class="actions">
-        <form method="post" action="{{ url_for('draft', cid=cid, sm=sm) }}"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="recollect" value="1">
-          <button {{ 'disabled' if locked }}>NCP 다시 수집해서 만들기</button></form>
-        <form method="post" action="{{ url_for('draft', cid=cid, sm=sm) }}"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="recollect" value="0">
-          <button {{ 'disabled' if locked }}>입력만 반영해서 다시 만들기</button></form>
-        <form method="post" action="{{ url_for('review_mail', cid=cid, sm=sm) }}"><input type="hidden" name="csrf" value="{{ csrf }}">
-          <button {{ 'disabled' if busy }}>점검 메일 다시 보내기</button></form>
-      </div>
-    </details>
-    {% endif %}
-  </section>
+    <tr>
+      <td class="l"><b>2. 승인</b></td>
+      <td class="l">{% if run.status in ('approved', 'sent') %}{{ tag('ok', '승인') }}{% else %}{{ tag('mute', '미승인') }}{% endif %}
+        <div class="small muted">{% if run.approved_at %}{{ run.approved_at }} · {{ run.approved_by }}{% endif %}</div></td>
+      <td class="l"><div class="acts">
+        {% if run.status == 'approved' %}
+        <form class="inl" method="post" action="{{ url_for('unapprove', cid=cid, sm=sm) }}"><input type="hidden" name="csrf" value="{{ csrf }}"><button {{ 'disabled' if busy }}>승인 취소</button></form>
+        {% elif not sent %}
+        <form class="acts" method="post" action="{{ url_for('approve', cid=cid, sm=sm) }}"
+              onsubmit="return confirm('{{ ym[1]|int }}월 보고서를 승인합니다.{% if errors %}\n\n확인 필요 항목(오류 {{ errors|length }}건)이 남아 있습니다. 그래도 승인할까요?{% endif %}')">
+          <input type="hidden" name="csrf" value="{{ csrf }}"><input type="text" name="by" placeholder="승인자" style="width:90px">
+          <button class="primary" {{ 'disabled' if locked or not run.pdf_path or stale }}>승인</button></form>
+        {% endif %}
+      </div></td>
+    </tr>
 
-  <!-- 일정 -->
-  <section class="card">
-    <div class="sched">
-      <div><span class="pill review">점검</span> <b>{{ fmt_day(sc.review_date) }}</b> {{ st.review_time }}</div>
-      <div><span class="pill send">발송</span> <b>{{ fmt_day(sc.send_date) }}</b> {{ st.send_time }}</div>
-    </div>
-    <p class="small muted" style="margin:6px 0 10px">
-      {% if sc.manual %}<span class="badge b-warn">직접 지정</span> {{ sc.note }}{% else %}<span class="badge b-mute">자동</span> {{ sc.auto_reason }}{% endif %}
-      {% if not st.auto_send|int %}<br><span class="badge b-err">자동 발송 꺼짐</span>{% endif %}
-    </p>
-    <table class="mcal">
-      <tr>{% for w in '월화수목금토일' %}<th>{{ w }}</th>{% endfor %}</tr>
-      {% for week in calendar %}<tr>
-        {% for d in week %}
-          {% if d is none %}<td></td>
-          {% else %}<td class="{{ 'we' if d.weekend }} {{ 'hol' if d.holiday }} {{ 'today' if d.date == today }} {{ 'is-review' if d.date == sc.review_date }} {{ 'is-send' if d.date == sc.send_date }}"
-                     title="{{ d.holiday or '' }}">{{ d.day }}</td>{% endif %}
-        {% endfor %}</tr>{% endfor %}
-    </table>
-    <details class="more" {{ 'open' if sc.manual }}>
-      <summary>날짜 바꾸기</summary>
-      <form method="post" action="{{ url_for('save_schedule', cid=cid, sm=sm) }}">
-        <input type="hidden" name="csrf" value="{{ csrf }}">
-        <div class="row" style="margin-top:8px">
-          <label class="small">점검 <input type="date" name="review_date" value="{{ sc.review_date.isoformat() if sc.manual else '' }}"></label>
-          <label class="small">발송 <input type="date" name="send_date" value="{{ sc.send_date.isoformat() if sc.manual else '' }}"></label>
-        </div>
-        <input type="text" name="note" value="{{ sc.note }}" placeholder="사유 (선택)" style="width:100%;margin-top:6px">
-        <div class="row" style="margin-top:8px">
-          <button class="primary" name="action" value="save">저장</button>
-          {% if sc.manual %}<button name="action" value="reset">자동으로 되돌리기</button>{% endif %}
-        </div>
-        <p class="small muted" style="margin:6px 0 0">발송일만 바꾸면 점검일은 그 전 영업일로 맞춰집니다.</p>
-      </form>
-    </details>
-  </section>
+    <tr>
+      <td class="l"><b>3. 고객사 발송</b></td>
+      <td class="l">{% if sent %}{{ tag('ok', '발송 완료') }}{% else %}{{ tag('mute', '미발송') }}{% endif %}
+        <div class="small muted">{% if sent %}{{ run.sent_at }}{% else %}{{ sc.send_date.strftime('%m/%d') }} {{ st.send_time }} {{ '자동 발송' if st.auto_send|int else '수동 발송' }}{% endif %}</div></td>
+      <td class="l"><div class="acts">
+        {% if run.status == 'approved' %}
+        <form class="inl" method="post" action="{{ url_for('send_now', cid=cid, sm=sm) }}" onsubmit="return confirm('{{ real_confirm }}')">
+          <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="confirm" value="yes">
+          <button class="primary" {{ 'disabled' if busy or sendable }}>지금 발송</button></form>
+        {% elif not sent %}
+        <form class="inl" method="post" action="{{ url_for('send_direct', cid=cid, sm=sm) }}" onsubmit="return confirm('승인과 발송을 한 번에 처리합니다.\n\n' + '{{ real_confirm }}')">
+          <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="confirm" value="yes">
+          <button {{ 'disabled' if locked or not run.pdf_path or stale or sendable_direct }}>승인 없이 바로 발송</button></form>
+        {% endif %}
+      </div>
+      <div class="small muted" style="margin-top:4px">{{ cm_from or '운영자 미설정' }} &rarr; {{ cm_to or '받는 사람 미설정' }}</div>
+      {% if not sent %}{% set probs = sendable if run.status == 'approved' else (sendable_direct if run.pdf_path else []) %}
+        {% if probs %}<div class="small" style="color:var(--warn)">{{ probs|join(' / ') }}</div>{% endif %}{% endif %}</td>
+    </tr>
+  </table>
+
+  {% if files %}<div class="pb small" style="border-top:1px solid var(--line2)"><span class="muted">파일</span>&nbsp;
+    {% for f in files %}<a href="{{ url_for('download', cid=cid, sm=sm, key=f.key) }}">{{ f.label }}</a>{{ '  ·  ' if not loop.last }}{% endfor %}</div>{% endif %}
 </div>
 
-<!-- 확인 필요 -->
-{% if run.draft_at %}
-<section class="card">
-  <h2>확인 필요 {% if errors or warns %}<span class="badge b-err">{{ errors|length + warns|length }}</span>{% else %}<span class="badge b-ok">이상 없음</span>{% endif %}</h2>
-  {% if errors or warns %}
+<!-- 확인 필요 (있을 때만) -->
+{% if run.draft_at and (errors or warns) %}
+<div class="panel">
+  <div class="ph">확인 필요<span class="aux">운영자용 · 고객사 메일에는 포함되지 않음</span></div>
   {% set ns = namespace(perf=false) %}
-  <ul class="checks">
+  <ul class="checklist">
     {% for i in errors + warns %}
-    <li class="lv-{{ i.level }}"><b>{{ i.item }}</b> {{ i.message }}
-      {% if i.item == '백업' %} <a href="#backup" class="tablink" data-tab="report">→ 작업결과 지정</a>
-      {% elif i.item == '지원 내역' %} <a href="#support" class="tablink" data-tab="support">→ 입력</a>
-      {% elif i.item == '성능' and not ns.perf %}{% set ns.perf = true %} <a href="#perf" class="tablink" data-tab="report">→ CSV로 채우기</a>{% endif %}
-    </li>
+    <li>{{ lvtag(i.level) }}<b>{{ i.item }}</b> {{ i.message }}
+      <span class="act">{% if i.item == '백업' %}<a href="#backup" class="tablink" data-tab="report">작업결과 지정</a>
+        {% elif i.item == '지원 내역' %}<a href="#support" class="tablink" data-tab="support">입력</a>
+        {% elif i.item == '성능' and not ns.perf %}{% set ns.perf = true %}<a href="#perf" class="tablink" data-tab="report">CSV로 채우기</a>{% endif %}</span></li>
     {% endfor %}
   </ul>
-  {% endif %}
-  {% if infos %}<details class="small muted"><summary>참고 {{ infos|length }}건</summary><ul>{% for i in infos %}<li>{{ i.item }}: {{ i.message }}</li>{% endfor %}</ul></details>{% endif %}
-</section>
+</div>
 {% endif %}
 
-<!-- 탭 -->
-<section class="card">
+<!-- 상세 -->
+<div class="panel">
   <nav class="tabs">
-    <button type="button" data-tab="support">지원 내역 <span class="count">{{ support|length }}</span></button>
+    <button type="button" data-tab="support">지원 내역<span class="count">{{ support|length }}</span></button>
     <button type="button" data-tab="report">보고서 내용</button>
-    <button type="button" data-tab="mail">고객사 메일</button>
-    <button type="button" data-tab="history">이력</button>
+    <button type="button" data-tab="mail">메일 · 이력</button>
   </nav>
 
-  <!-- 지원 내역 -->
   <div class="tab" id="tab-support">
-    <table class="t">
-      <tr><th style="width:110px">날짜</th><th style="width:120px">지원종류</th><th>작업내용</th><th style="width:110px">작업결과</th><th style="width:44px"></th></tr>
+    <table class="grid">
+      <tr><th style="width:110px">날짜</th><th style="width:130px">지원종류</th><th class="l">작업내용</th><th style="width:110px">작업결과</th><th style="width:50px"></th></tr>
       {% for e in support %}
       <tr><td>{{ e.date }}</td><td>{{ e.kind }}</td><td class="l">{{ e.content }}</td><td>{{ e.result }}</td>
         <td><form method="post" action="{{ url_for('support_delete', cid=cid, sm=sm, eid=e.id) }}" onsubmit="return confirm('삭제할까요?')">
-          <input type="hidden" name="csrf" value="{{ csrf }}"><button class="icon" title="삭제" {{ 'disabled' if run.status=='sent' }}>✕</button></form></td></tr>
+          <input type="hidden" name="csrf" value="{{ csrf }}"><button class="icon" {{ 'disabled' if sent }}>삭제</button></form></td></tr>
       {% else %}<tr><td colspan="5" class="muted">{{ ym[1]|int }}월 지원 내역이 없습니다. 없으면 비워 두어도 됩니다.</td></tr>{% endfor %}
     </table>
-    {% if run.status != 'sent' %}
+    {% if not sent %}
     <form method="post" action="{{ url_for('support_add', cid=cid, sm=sm) }}" class="addrow">
       <input type="hidden" name="csrf" value="{{ csrf }}">
       <input type="date" name="date" required min="{{ rm }}-01" max="{{ rm }}-{{ data.last_day if data else 28 }}">
       <input type="text" name="kind" placeholder="지원종류" list="kinds" required>
       <datalist id="kinds"><option value="정기점검"><option value="장애대응"><option value="기술지원"><option value="작업지원"><option value="문의응대"></datalist>
       <input type="text" name="content" placeholder="작업내용" required class="grow">
-      <input type="text" name="result" placeholder="결과 (완료)">
+      <input type="text" name="result" placeholder="작업결과 (기본: 완료)">
       <button class="primary">추가</button>
     </form>
     {% endif %}
   </div>
 
-  <!-- 보고서 내용 -->
   <div class="tab" id="tab-report">
-    {% if not data %}<p class="muted">아직 보고서가 없습니다. 위의 '보고서 만들기'를 눌러 주세요.</p>
+    {% if not data %}<p class="muted">보고서가 아직 생성되지 않았습니다.</p>
     {% else %}
     <h3>장비 현황</h3>
-    <table class="t">
-      <tr><th>구분</th><th>유형</th><th>이름</th><th>OS</th><th>공인 IP</th><th>CPU</th><th>메모리</th><th>스토리지</th></tr>
+    <table class="grid">
+      <tr><th>구분</th><th>유형</th><th>디바이스 이름</th><th>Mode or OS</th><th>공인 IP</th><th>CPU</th><th>메모리</th><th>스토리지</th></tr>
       {% for d in data.devices %}<tr>
-        {% if d.missing %}<td>{{ d.category }}</td><td>{{ d.device_type }}</td><td>{{ d.name }}</td><td colspan="5"><span class="badge b-err">NCP 에 없음</span></td>
+        {% if d.missing %}<td>{{ d.category }}</td><td>{{ d.device_type }}</td><td>{{ d.name }}</td><td colspan="5">{{ tag('err', 'NCP 에 없음') }}</td>
         {% else %}<td>{{ d.category }}</td><td>{{ d.device_type }}</td><td>{{ d.name }}</td><td>{{ d.os }}</td><td>{{ d.public_ip }}</td><td>{{ d.cpu }}</td><td>{{ d.memory_gb }}</td><td title="{{ d.disks|join(', ') }}">{{ d.storage }}</td>{% endif %}
       </tr>{% endfor %}
     </table>
 
-    <h3 id="perf">성능 현황 <span class="small muted">· {{ '콘솔 CSV' if data.perf_source=='csv' else 'Cloud Insight' }}</span></h3>
-    <table class="t">
-      <tr><th rowspan="2">이름</th><th colspan="2">CPU %</th><th colspan="2">메모리 %</th><th colspan="2">SWAP %</th><th colspan="3">디스크 %</th></tr>
-      <tr><th>최대</th><th>평균</th><th>최대</th><th>평균</th><th>최대</th><th>평균</th><th>F/S</th><th>최대</th><th>평균</th></tr>
+    <h3 id="perf">성능 현황 <span class="muted" style="font-weight:400">· {{ '콘솔 CSV' if data.perf_source=='csv' else 'Cloud Insight' }}</span></h3>
+    <table class="grid">
+      <tr><th rowspan="2">디바이스</th><th colspan="2">CPU (%)</th><th colspan="2">Memory (%)</th><th colspan="2">SWAP (%)</th><th colspan="3">Disk 사용률</th></tr>
+      <tr><th>최대</th><th>평균</th><th>최대</th><th>평균</th><th>최대</th><th>평균</th><th>Top F/S</th><th>최대</th><th>평균</th></tr>
       {% for p in data.performance %}<tr><td>{{ p.name }}</td><td>{{ num(p.cpu_max) }}</td><td>{{ num(p.cpu_avg) }}</td><td>{{ num(p.mem_max) }}</td><td>{{ num(p.mem_avg) }}</td>
         <td>{{ num(p.swap_max) }}</td><td>{{ num(p.swap_avg) }}</td><td>{{ p.fs_name }}</td><td>{{ num(p.disk_max) }}</td><td>{{ num(p.disk_avg) }}</td></tr>{% endfor %}
     </table>
-    {% if run.status != 'sent' %}
-    <details class="more"><summary>콘솔 CSV로 채우기</summary>
-      <form method="post" enctype="multipart/form-data" action="{{ url_for('perf_csv_upload', cid=cid, sm=sm) }}" class="row" style="margin-top:8px">
+    {% if not sent %}
+    <details class="more" style="margin-top:8px"><summary>콘솔 CSV로 채우기</summary>
+      <form method="post" enctype="multipart/form-data" action="{{ url_for('perf_csv_upload', cid=cid, sm=sm) }}" class="acts" style="margin-top:8px">
         <input type="hidden" name="csrf" value="{{ csrf }}">
         <input type="file" name="files" accept=".csv" multiple>
         <button {{ 'disabled' if busy }}>반영</button>
-        <span class="small muted">Cloud Insight 콘솔에서 내려받은 CPU/MEMORY/DISK CSV (여러 개 선택 가능)</span>
       </form>
       {% if data.perf_csv_notes %}<ul class="small muted">{% for n in data.perf_csv_notes %}<li>{{ n }}</li>{% endfor %}</ul>{% endif %}
     </details>
@@ -207,59 +209,57 @@
     <h3 id="backup">백업 현황</h3>
     <form method="post" action="{{ url_for('backup_override', cid=cid, sm=sm) }}">
       <input type="hidden" name="csrf" value="{{ csrf }}">
-      <table class="t">
-        <tr><th>대상</th><th>빈도</th><th>정책</th><th>자동 확인</th><th style="width:200px">보고서 작업결과</th></tr>
+      <table class="grid">
+        <tr><th>백업 대상</th><th>백업 빈도</th><th class="l">백업 정책</th><th style="width:200px">작업결과</th></tr>
         {% for b in data.backup %}<tr><td>{{ b.server }}</td><td>{{ b.frequency }}</td><td class="l small">{{ b.policy }}</td>
-          <td title="{{ b.detail }}"><span class="badge {{ {'ok':'b-ok','missing':'b-err'}.get(b.level,'b-warn') }}">{{ b.auto_result }}</span></td>
-          <td><input type="text" name="result_{{ b.server }}" value="{{ b.override }}" placeholder="{{ b.auto_result }}" list="bkres" style="width:100%"></td></tr>{% endfor %}
+          <td><input type="text" name="result_{{ b.server }}" value="{{ b.override }}" placeholder="{{ b.auto_result or '(빈칸)' }}" list="bkres"></td></tr>{% endfor %}
       </table>
       <datalist id="bkres"><option value="정상"><option value="일부 누락"></datalist>
-      {% if run.status != 'sent' %}<div class="row" style="margin-top:8px"><button>작업결과 저장</button>
-        <span class="small muted">비워 두면 자동 확인 결과를 씁니다. 스냅샷 이전 기간은 직접 '정상' 등으로 지정하세요.</span></div>{% endif %}
+      {% if not sent %}<div class="acts" style="margin-top:8px"><button>작업결과 저장</button>
+        <span class="small muted">비워 두면 설정의 고정 문구(기본 빈칸)로 표기됩니다.</span></div>{% endif %}
     </form>
     {% endif %}
   </div>
 
-  <!-- 고객사 메일 -->
   <div class="tab" id="tab-mail">
     {% if cm_err %}<div class="flash error">{{ cm_err }}</div>{% endif %}
     {% if cm %}
+    <h3>고객사 메일</h3>
     <div class="mailhead">
-      <div><span>보내는 사람</span>{% if cm.from %}{{ cm.from }} <span class="small muted">(운영자 메일)</span>{% else %}<a href="{{ url_for('customer_settings', cid=cid) }}">운영자 이메일 설정하기 →</a>{% endif %}</div>
-      <div><span>받는 사람</span>{% if cm.to %}{{ cm.to|join(', ') }}{% else %}<a href="{{ url_for('customer_settings', cid=cid) }}">설정하기 →</a>{% endif %}</div>
+      <div><span>보내는 사람</span>{% if cm.from %}{{ cm.from }}{% else %}<a href="{{ url_for('customer_settings', cid=cid) }}">운영자 이메일 설정</a>{% endif %}</div>
+      <div><span>받는 사람</span>{% if cm.to %}{{ cm.to|join(', ') }}{% else %}<a href="{{ url_for('customer_settings', cid=cid) }}">고객사 담당자 이메일 설정</a>{% endif %}</div>
       {% if cm.cc %}<div><span>참조</span>{{ cm.cc|join(', ') }}</div>{% endif %}
       <div><span>제목</span>{{ cm.subject }}</div>
-      <div><span>첨부</span>승인된 PDF</div>
+      <div><span>첨부</span>승인된 보고서 PDF</div>
     </div>
     <div class="mailpreview">{{ cm.body }}</div>
-    <p class="small muted"><a href="{{ url_for('customer_settings', cid=cid) }}">문구·수신자 수정</a></p>
+    <p class="small"><a href="{{ url_for('customer_settings', cid=cid) }}">수신자·문구 수정</a></p>
     {% endif %}
-  </div>
 
-  <!-- 이력 -->
-  <div class="tab" id="tab-history">
-    <h3>메일</h3>
-    <table class="t">
-      <tr><th>시각</th><th>종류</th><th>결과</th><th>받는 사람</th></tr>
-      {% for m in mails %}<tr><td class="small">{{ m.at }}</td><td>{{ {'review':'점검','customer':'고객사','notify':'알림'}.get(m.kind, m.kind) }}</td>
-        <td><span class="badge {{ {'sent':'b-ok','saved':'b-dry','failed':'b-err'}.get(m.status,'b-mute') }}" title="{{ m.error or m.path or '' }}">{{ {'sent':'발송','saved':'dry-run 저장','failed':'실패'}.get(m.status, m.status) }}</span></td>
-        <td class="l small">{{ m.recipients }}</td></tr>
-      {% else %}<tr><td colspan="4" class="muted">없음</td></tr>{% endfor %}
+    <h3>메일 발송 이력</h3>
+    <table class="grid">
+      <tr><th style="width:150px">일시</th><th style="width:70px">구분</th><th style="width:70px">방식</th><th style="width:70px">결과</th><th class="l">받는 사람</th></tr>
+      {% for m in mails %}<tr><td class="small">{{ m.at }}</td><td>{{ {'review':'점검','customer':'고객사','notify':'알림','test':'시험'}.get(m.kind, m.kind) }}</td>
+        <td>{{ '실제' if m.mode == 'live' else '테스트' }}</td>
+        <td>{{ tag({'sent':'ok','saved':'mute','failed':'err'}.get(m.status,'mute'), {'sent':'발송','saved':'저장','failed':'실패'}.get(m.status, m.status)) }}</td>
+        <td class="l small" title="{{ m.error or m.path or '' }}">{{ m.recipients }}{% if m.error %} <span style="color:var(--err)">{{ m.error[:80] }}</span>{% endif %}</td></tr>
+      {% else %}<tr><td colspan="5" class="muted">이력이 없습니다.</td></tr>{% endfor %}
     </table>
-    <h3>작업</h3>
-    <table class="t">
-      <tr><th>시각</th><th>작업</th><th>결과</th><th>내용</th></tr>
+
+    <h3>작업 이력</h3>
+    <table class="grid">
+      <tr><th style="width:150px">일시</th><th class="l" style="width:190px">작업</th><th style="width:70px">결과</th><th class="l">내용</th></tr>
       {% for j in jobs %}<tr><td class="small">{{ j.at }}</td><td class="l small">{{ j.job }}</td>
-        <td><span class="badge {{ {'ok':'b-ok','fail':'b-err','start':'b-info'}.get(j.status,'b-mute') }}">{{ j.status }}</span></td>
+        <td>{{ tag({'ok':'ok','fail':'err','start':'info'}.get(j.status,'mute'), {'ok':'성공','fail':'실패','start':'시작','skip':'건너뜀'}.get(j.status, j.status)) }}</td>
         <td class="l small" title="{{ j.message }}">{{ j.message[:140] }}</td></tr>
-      {% else %}<tr><td colspan="4" class="muted">없음</td></tr>{% endfor %}
+      {% else %}<tr><td colspan="4" class="muted">이력이 없습니다.</td></tr>{% endfor %}
     </table>
   </div>
-</section>
+</div>
 
 <script>
 (function () {
-  var hashTab = {"#support": "support", "#backup": "report", "#perf": "report", "#mail": "mail", "#history": "history"};
+  var hashTab = {"#support": "support", "#backup": "report", "#perf": "report", "#mail": "mail"};
   function show(name) {
     document.querySelectorAll(".tabs button").forEach(function (b) { b.classList.toggle("on", b.dataset.tab === name); });
     document.querySelectorAll(".tab").forEach(function (t) { t.hidden = t.id !== "tab-" + name; });

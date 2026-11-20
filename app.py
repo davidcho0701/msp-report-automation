@@ -245,7 +245,8 @@ def send_now(cid, sm):
     rm = schedule.report_month_for(sm)
     if request.form.get("confirm") != "yes":
         abort(400)
-    return _sync(cid, sm, pipeline.send_customer, cid, rm, ok="고객사 메일 처리")
+    # 운영자가 직접 누른 발송: .env 모드와 무관하게 실제 발송
+    return _sync(cid, sm, pipeline.send_customer, cid, rm, True, ok="고객사에 발송했습니다")
 
 
 @app.post("/c/<cid>/<sm>/send-direct")
@@ -257,7 +258,7 @@ def send_direct(cid, sm):
     if request.form.get("confirm") != "yes":
         abort(400)
     by = request.form.get("by", "").strip() or db.get_global("operator_name") or "운영자(바로 발송)"
-    return _sync(cid, sm, pipeline.approve_and_send, cid, rm, by, ok="승인 후 발송 처리")
+    return _sync(cid, sm, pipeline.approve_and_send, cid, rm, by, True, ok="승인 후 고객사에 발송했습니다")
 
 
 @app.post("/c/<cid>/<sm>/support")

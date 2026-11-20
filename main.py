@@ -29,6 +29,8 @@ def main() -> None:
             p.add_argument("--no-recollect", action="store_true")
         if name == "approve":
             p.add_argument("--by", default="")
+        if name == "send":
+            p.add_argument("--live", action="store_true", help=".env 모드와 무관하게 실제 발송")
         if name == "schedule":
             p.add_argument("--send-month", required=True)
     a = ap.parse_args()
@@ -49,7 +51,7 @@ def main() -> None:
         pipeline.approve(a.customer, a.month, a.by)
         print("approved")
     elif a.cmd == "send":
-        print(pipeline.send_customer(a.customer, a.month))
+        print(pipeline.send_customer(a.customer, a.month, live=a.live))
     elif a.cmd == "schedule":
         print(pipeline.schedule_for(a.customer, a.send_month))
 

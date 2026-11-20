@@ -154,9 +154,13 @@ def _send_outlook(msg: EmailMessage, wait_sec: int = 90) -> None:
         pythoncom.CoUninitialize()
 
 
-def deliver(msg: EmailMessage, kind: str, outbox: Path) -> tuple[str, str]:
-    """(mode, 사본 경로). dry-run 은 .eml 저장만, live 는 선택한 방식으로 발송 후에도 사본 저장."""
-    mode = mail_mode(kind)
+def deliver(msg: EmailMessage, kind: str, outbox: Path, live: bool = False) -> tuple[str, str]:
+    """(mode, 사본 경로). dry-run 은 .eml 저장만, live 는 선택한 방식으로 발송 후에도 사본 저장.
+
+    live=True 는 운영자가 화면에서 직접 '발송'을 눌렀을 때: .env 의 모드와 무관하게 실제 발송.
+    (자동 스케줄러는 live 를 넘기지 않으므로 .env 의 MAIL_MODE_* 를 따른다.)
+    """
+    mode = "live" if (live or mail_mode(kind) == "live") else "dryrun"
     outbox.mkdir(parents=True, exist_ok=True)
     path = outbox / f'{now():%Y%m%d_%H%M%S}_{kind}_{mode}.eml'
     path.write_bytes(bytes(msg))

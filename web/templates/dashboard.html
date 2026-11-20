@@ -1,21 +1,26 @@
 {% extends "base.html" %}
+{% from "_macros.html" import tag, run_status %}
+{% block title %}고객사{% endblock %}
 {% block body %}
-<div class="pagehead"><h1>고객사</h1><span class="muted">{{ send_month.split('-')[1]|int }}월 발송</span></div>
+<div class="pagebar">
+  <div><h1>고객사<span class="sub">{{ send_month.split('-')[1]|int }}월 발송분</span></h1></div>
+</div>
 
-<div class="grid3">
-{% for c in cards %}
-  <a class="card ccard" href="{{ url_for('month_view', cid=c.cid, sm=send_month) }}">
-    <h2 style="margin:0">{{ c.name }}</h2>
-    <div class="small muted">{{ c.sc.report_month.split('-')[0] }}년 {{ c.sc.report_month.split('-')[1]|int }}월 보고서</div>
-    <div class="when">
-      <div><span class="pill review">점검</span> {{ fmt_day(c.sc.review_date) }}</div>
-      <div><span class="pill send">발송</span> {{ fmt_day(c.sc.send_date) }}{% if c.sc.manual %} <span class="badge b-warn">직접 지정</span>{% endif %}</div>
-    </div>
-    <div class="todo tone-{{ c.na.tone }}" style="padding:10px 12px">
-      <div style="font-weight:800">{{ c.na.title }}</div>
-      {% if c.busy %}<div class="small">⏳ 작업 중…</div>{% endif %}
-    </div>
-  </a>
-{% endfor %}
+<div class="panel">
+  <table class="grid hover">
+    <tr><th class="l">고객사</th><th>대상 보고서</th><th>발송 예정</th><th>상태</th><th class="l">다음 처리</th></tr>
+    {% for c in cards %}
+    {% set e = c.issues|selectattr('level','equalto','error')|list|length %}
+    {% set w = c.issues|selectattr('level','equalto','warn')|list|length %}
+    <tr>
+      <td class="l"><a href="{{ url_for('month_view', cid=c.cid, sm=send_month) }}"><b>{{ c.name }}</b></a></td>
+      <td>{{ c.sc.report_month.split('-')[0] }}년 {{ c.sc.report_month.split('-')[1]|int }}월</td>
+      <td>{{ fmt_day(c.sc.send_date) }} {{ c.st.send_time }}</td>
+      <td>{{ run_status(c.run) }}{% if c.busy %} <span class="muted">· 작업 중</span>{% endif %}
+        {% if c.run.draft_at and (e or w) %}<span class="muted"> · 확인 필요 {{ e + w }}건</span>{% endif %}</td>
+      <td class="l">{{ c.na.title }}</td>
+    </tr>
+    {% endfor %}
+  </table>
 </div>
 {% endblock %}

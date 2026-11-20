@@ -1,16 +1,17 @@
-{% macro status_badge(run) -%}
+{% macro tag(kind, text) -%}<span class="tag t-{{ kind }}">{{ text }}</span>{%- endmacro %}
+
+{% macro run_status(run) -%}
   {%- set s = run.status or 'none' -%}
-  {%- if s == 'sent' -%}<span class="badge b-ok">발송 완료</span>
-  {%- elif s == 'approved' -%}<span class="badge b-info">승인됨</span>
-  {%- elif s == 'draft' -%}<span class="badge b-warn">검토 대기</span>
-  {%- else -%}<span class="badge b-mute">초안 없음</span>
-  {%- endif -%}
+  {%- if s == 'sent' -%}<span class="tag t-ok">발송 완료</span>
+  {%- elif s == 'approved' -%}<span class="tag t-info">승인됨</span>
+  {%- elif s == 'draft' -%}<span class="tag t-warn">검토 대기</span>
+  {%- else -%}<span class="tag t-mute">미생성</span>{%- endif -%}
 {%- endmacro %}
 
-{% macro level_badge(level) -%}
-  {%- if level == 'error' -%}<span class="badge b-err">오류</span>
-  {%- elif level == 'warn' -%}<span class="badge b-warn">주의</span>
-  {%- else -%}<span class="badge b-info">참고</span>{%- endif -%}
+{% macro lvtag(level) -%}
+  {%- if level == 'error' -%}<span class="tag t-err">오류</span>
+  {%- elif level == 'warn' -%}<span class="tag t-warn">주의</span>
+  {%- else -%}<span class="tag t-mute">참고</span>{%- endif -%}
 {%- endmacro %}
 
 {% macro num(v) -%}{{ '-' if v is none else ('0' if v == 0 else '%.2f'|format(v)) }}{%- endmacro %}

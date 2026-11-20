@@ -3,22 +3,20 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{% block title %}MSP 월간 보고서{% endblock %}</title>
+  <title>{% block title %}월간 보고서 관리{% endblock %}</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
   {% block head %}{% endblock %}
 </head>
 <body>
 <header class="top">
-  <a class="logo" href="{{ url_for('dashboard') }}">UWS 월간보고서</a>
+  <a class="logo" href="{{ url_for('dashboard') }}">UWS 월간 보고서 관리</a>
   <nav>
     <a href="{{ url_for('dashboard') }}">고객사</a>
-    <a href="{{ url_for('global_settings') }}">설정</a>
+    <a href="{{ url_for('global_settings') }}">환경 설정</a>
   </nav>
-  <div class="modes" title="메일 모드는 .env 에서 변경 (MAIL_MODE_OPERATOR / MAIL_MODE_CUSTOMER)">
-    {% if mode_operator == 'live' or mode_customer == 'live' %}
-      {% if mode_customer == 'live' %}<span class="badge b-live">고객사 메일 실발송</span>{% endif %}
-      {% if mode_operator == 'live' %}<span class="badge b-live">운영자 메일 실발송</span>{% endif %}
-    {% else %}<span class="badge b-dry">테스트 모드 · 메일은 파일로만 저장</span>{% endif %}
+  <div class="envs">
+    {% if mode_customer != 'live' %}<span title=".env MAIL_MODE_CUSTOMER=dryrun · 자동 발송은 메일을 보내지 않고 파일로만 저장합니다 (수동 발송은 항상 실제 발송)">자동 발송: 테스트 모드</span>{% endif %}
+    {% if mode_operator != 'live' %}<span title=".env MAIL_MODE_OPERATOR=dryrun · 점검 메일을 보내지 않고 파일로만 저장합니다">점검 메일: 테스트 모드</span>{% endif %}
   </div>
 </header>
 <main>
