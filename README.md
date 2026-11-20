@@ -58,7 +58,7 @@ NAVER Cloud Platform(NCP) 고객사의 **월간 MSP 보고서**를 자동으로 
 
 ### 설치
 ```powershell
-cd ncp-monthly-report
+cd ncp-monthly-report          # ZIP으로 받았다면 압축을 푼 폴더 이름 (예: msp-report-automation-main)
 python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 ```
@@ -83,6 +83,82 @@ python -m venv .venv
 - 웹 서버 안에서 **자동 스케줄러**(스냅샷, 점검일 초안, 발송일 발송)가 함께 동작합니다. 자동 처리를 쓰려면 프로그램을 계속 켜 두세요.
 - `.env`를 수정한 뒤에는 **프로그램을 재시작**해야 반영됩니다.
 - 화면은 **이 PC에서만** 접속할 수 있습니다 (`127.0.0.1`).
+
+### ZIP으로 받아 새 PC에서 시작하기
+GitHub에서 **Code → Download ZIP**으로 받은 경우의 절차입니다. 아래 순서대로 하면 처음부터 실행까지 갈 수 있습니다.
+
+**1) 압축 해제**
+- 폴더 이름은 `msp-report-automation-main`처럼 풀립니다. 이후 명령의 `ncp-monthly-report` 대신 **압축을 푼 폴더**로 이동하세요.
+```powershell
+cd "압축을 푼 폴더 경로"
+```
+
+**2) Python 3.12 설치**
+- python.org에서 설치하고, 설치 화면에서 **Add python.exe to PATH**를 체크합니다.
+- 확인: `python --version`
+
+**3) 가상환경 만들고 패키지 설치**
+```powershell
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+```
+
+**4) `.env` 만들기**
+```powershell
+Copy-Item .env.example .env
+notepad .env
+```
+- `NCLOUD_ACCESS_KEY`, `NCLOUD_SECRET_KEY`를 입력하고 `MAIL_TRANSPORT=outlook`으로 둡니다.
+- **처음에는 `MAIL_MODE_OPERATOR=dryrun`, `MAIL_MODE_CUSTOMER=dryrun`으로 두세요.** 메일이 나가지 않고 파일로만 저장되어 안전하게 시험할 수 있습니다.
+
+**5) NCP CLI 설치와 키 등록**
+- NCP CLI(Windows용)를 내려받아 압축을 풀고, 그 폴더(`cli_windows`)에서 키를 등록합니다.
+```powershell
+cd "C:\...\cli_windows"        # ncloud.cmd 가 있는 폴더
+.\ncloud.cmd configure         # Access Key / Secret Key / API URL 입력
+.\ncloud.cmd vserver getRegionList   # 지역 목록이 나오면 연결 성공
+```
+
+**6) CLI 경로를 설정 파일에 맞추기**
+- `config/config.yaml`의 `ncloud.cli_dir`를 **5번의 `cli_windows` 폴더 경로**로 고칩니다. (파일에 들어 있는 값은 만든 PC의 경로라서 반드시 바꿔야 합니다.)
+```yaml
+ncloud:
+  cli_dir: 'C:\...\cli_windows'
+```
+
+**7) NCP 연결 확인 (조회만 합니다)**
+```powershell
+cd "압축을 푼 폴더 경로"
+.\.venv\Scripts\python.exe -m src.collect_cli --month 2026-10
+```
+- 서버 목록이 표시되면 성공입니다. **"NCP 에 없음"** 으로 나오면 `config/customers/<고객사>.yaml`의 서버 이름이 내 NCP 계정의 서버와 다른 것이므로, 서버 이름과 시스템 그룹을 내 환경에 맞게 고칩니다.
+- 성능 수치까지 확인하려면 계정에 **Cloud Insight 조회 정책**(`NCP_CLOUD_INSIGHT_VIEWER`)이 필요합니다.
+
+**8) 자동 테스트로 설치 점검 (선택)**
+```powershell
+.\.venv\Scripts\python.exe -m pytest -q tests
+```
+
+**9) 실행과 첫 설정**
+```powershell
+.\.venv\Scripts\python.exe app.py
+```
+- http://127.0.0.1:8000 에서 **고객사 설정**의 운영자·고객사 이메일을 입력합니다 (처음에는 **본인 메일**로 시험), **환경 설정**에서 메일 모드와 발송 방식을 확인합니다.
+- 월 화면에서 **보고서 생성**을 눌러 PPT/PDF 초안이 만들어지는지 확인합니다.
+
+**ZIP에 들어 있지 않아서 새로 해야 하는 것**
+
+| 없는 것 | 이유 | 해야 할 일 |
+|---|---|---|
+| `.env` | 비밀정보라 Git에서 제외 | `.env.example`을 복사해 직접 작성 (4번) |
+| `.venv` | PC마다 다른 실행 환경 | 3번 |
+| `data/app.db` | 수신자·일정·지원 내역·이력 (Git 제외) | 화면에서 설정을 다시 입력 (9번) |
+| `reports/`, `logs/` | 생성 파일과 호출 로그 (Git 제외) | 처음 실행할 때 자동으로 만들어짐 |
+| NCP CLI | 별도 프로그램 | 5번 |
+
+- 템플릿 PPT(`templates/skmns_template.pptx`)와 고객사 설정은 ZIP에 **포함**되어 있습니다. 고객사 서버 이름과 공인 IP가 들어 있으니 다른 사람에게 전달할 때 주의하세요.
+- **다른 고객사에 쓰려면** `config/customers/`에 yaml을 추가하고 템플릿 PPT를 `templates/`에 둡니다 ([설정 파일](#6-설정-파일) 참고).
+- **업데이트:** ZIP은 받은 시점의 스냅샷입니다. 새 버전을 받으면 `.env`, `data/`, `reports/`는 그대로 두고 나머지 파일만 덮어쓰세요. (기존 폴더에 덮어쓰기 전에 이 세 가지를 복사해 두는 것이 안전합니다.)
 
 ---
 
