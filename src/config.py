@@ -10,8 +10,9 @@ from zoneinfo import ZoneInfo
 import yaml
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-CONFIG_PATH = PROJECT_ROOT / "config" / "config.yaml"
-CUSTOMERS_DIR = PROJECT_ROOT / "config" / "customers"
+# 문서용 화면 캡처(scripts/capture_docs.py)처럼 별도 설정으로 실행할 때만 환경 변수로 경로를 바꾼다
+CONFIG_PATH = Path(os.environ.get("APP_CONFIG") or PROJECT_ROOT / "config" / "config.yaml")
+CUSTOMERS_DIR = Path(os.environ.get("APP_CUSTOMERS_DIR") or PROJECT_ROOT / "config" / "customers")
 
 
 def _load_env() -> None:

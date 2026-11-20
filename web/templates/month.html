@@ -27,7 +27,7 @@
 </div>
 
 <!-- 일정 (한 줄 요약, 눌러서 변경) -->
-<details class="sched">
+<details class="sched" {{ 'open' if request.args.get('open') == 'sched' }}>
   <summary>
     <span class="muted">점검</span><span><b>{{ fmt_day(sc.review_date) }}</b> {{ st.review_time }}</span>
     <span class="muted">발송</span><span><b>{{ fmt_day(sc.send_date) }}</b> {{ st.send_time }}</span>
