@@ -1,0 +1,31 @@
+# 전역 설정 (비밀정보 금지: 키/비밀번호는 .env 로만)
+# 고객사별 설정은 config/customers/<id>.yaml
+# 메일 수신자/일정/메일 문구 등 운영 설정은 웹 UI 에서 관리 (data/app.db)
+
+ncloud:
+  # ncloud.cmd 가 상대경로(.\jre8)를 쓰므로, 래퍼는 이 폴더를 cwd 로 두고 java -jar 를 직접 실행한다.
+  cli_dir: 'C:\CLI_1.1.30_20260625_20260625161805\CLI_1.1.30_20260625\cli_windows'
+  java_rel: 'jre8\bin\java.exe'
+  jar_rel: 'lib\ncloud-api-cli-1.1.30-SNAPSHOT-jar-with-dependencies.jar'
+  service: vserver          # VPC 환경
+  region: KR
+  timeout_sec: 120
+
+cloud_insight:
+  base_url: "https://cw.apigw.ntruss.com"
+  max_workers: 2            # 동시 조회 수 (호출 제한 429 방지)
+
+timezone: "Asia/Seoul"
+
+web:
+  host: 127.0.0.1           # 로컬 전용. 외부 공개 금지
+  port: 8000
+
+scheduler:
+  snapshot_time: "10:00"    # 매일 서버 이미지 스냅샷
+  tick_seconds: 30
+
+paths:
+  reports_dir: reports
+  data_dir: data
+  log_file: logs/api_calls.log

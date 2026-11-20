@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}전체 설정{% endblock %}
+{% block body %}
+<h1>전체 설정</h1>
+<div class="grid2">
+  <div class="card">
+    <h2>메일 · 운영자</h2>
+    <form method="post">
+      <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="action" value="general">
+      <div class="field"><label>보내는 사람 주소</label><input type="email" name="mail_from" value="{{ g.mail_from }}" style="width:100%">
+        <div class="hint">비우면 .env 의 SMTP_USER 사용</div></div>
+      <div class="field"><label>보내는 사람 이름</label><input type="text" name="mail_from_name" value="{{ g.mail_from_name }}" style="width:100%"></div>
+      <div class="field"><label>기본 승인자 이름</label><input type="text" name="operator_name" value="{{ g.operator_name }}"></div>
+      <div class="field"><label>이 화면 주소 (점검 메일 링크용)</label><input type="text" name="app_url" value="{{ g.app_url }}" style="width:100%"></div>
+      <button class="primary">저장</button>
+    </form>
+  </div>
+  <div class="card">
+    <h2>환경 상태 <span class="small muted">(.env — 값은 표시하지 않음)</span></h2>
+    <table class="t">
+      {% for k, v in env_status.items() %}<tr><td class="l">{{ k }}</td><td>{% if v %}<span class="badge b-ok">설정됨</span>{% else %}<span class="badge b-err">없음</span>{% endif %}</td></tr>{% endfor %}
+      <tr><td class="l">운영자 메일 모드 (MAIL_MODE_OPERATOR)</td><td><span class="badge {{ 'b-live' if mode_operator=='live' else 'b-dry' }}">{{ mode_operator }}</span></td></tr>
+      <tr><td class="l">고객사 메일 모드 (MAIL_MODE_CUSTOMER)</td><td><span class="badge {{ 'b-live' if mode_customer=='live' else 'b-dry' }}">{{ mode_customer }}</span></td></tr>
+    </table>
+    <p class="small muted">비밀정보와 메일 모드는 보안상 화면에서 바꿀 수 없습니다. .env 수정 후 프로그램을 다시 시작하세요.</p>
+  </div>
+</div>
+
+<div class="grid2">
+  <div class="card">
+    <h2>추가 휴무일</h2>
+    <p class="small muted">공휴일 목록에 없는 회사 휴무일·임시공휴일을 등록하면 자동 일정 계산에 반영됩니다.</p>
+    <table class="t">
+      <tr><th>날짜</th><th>사유</th><th></th></tr>
+      {% for d, n in extra.items() %}<tr><td>{{ d }}</td><td>{{ n }}</td><td>
+        <form class="inline" method="post"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="action" value="holiday_del">
+          <input type="hidden" name="date" value="{{ d }}"><button>삭제</button></form></td></tr>
+      {% else %}<tr><td colspan="3" class="muted">없음</td></tr>{% endfor %}
+    </table>
+    <form method="post" class="row" style="margin-top:10px">
+      <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="action" value="holiday_add">
+      <input type="date" name="date" required><input type="text" name="name" placeholder="사유"><button>추가</button>
+    </form>
+  </div>
+  <div class="card">
+    <h2>공휴일 (자동, 대체공휴일 포함)</h2>
+    <table class="t">
+      {% for d, n in kr_holidays %}<tr><td>{{ d }} ({{ '월화수목금토일'[d.weekday()] }})</td><td class="l">{{ n }}</td></tr>{% endfor %}
+    </table>
+  </div>
+</div>
+{% endblock %}

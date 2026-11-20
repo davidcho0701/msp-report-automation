@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block body %}
+<div class="pagehead"><h1>고객사</h1><span class="muted">{{ send_month.split('-')[1]|int }}월 발송</span></div>
+
+<div class="grid3">
+{% for c in cards %}
+  <a class="card ccard" href="{{ url_for('month_view', cid=c.cid, sm=send_month) }}">
+    <h2 style="margin:0">{{ c.name }}</h2>
+    <div class="small muted">{{ c.sc.report_month.split('-')[0] }}년 {{ c.sc.report_month.split('-')[1]|int }}월 보고서</div>
+    <div class="when">
+      <div><span class="pill review">점검</span> {{ fmt_day(c.sc.review_date) }}</div>
+      <div><span class="pill send">발송</span> {{ fmt_day(c.sc.send_date) }}{% if c.sc.manual %} <span class="badge b-warn">직접 지정</span>{% endif %}</div>
+    </div>
+    <div class="todo tone-{{ c.na.tone }}" style="padding:10px 12px">
+      <div style="font-weight:800">{{ c.na.title }}</div>
+      {% if c.busy %}<div class="small">⏳ 작업 중…</div>{% endif %}
+    </div>
+  </a>
+{% endfor %}
+</div>
+{% endblock %}

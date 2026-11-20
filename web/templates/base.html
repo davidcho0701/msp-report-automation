@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}MSP 월간 보고서{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  {% block head %}{% endblock %}
+</head>
+<body>
+<header class="top">
+  <a class="logo" href="{{ url_for('dashboard') }}">UWS 월간보고서</a>
+  <nav>
+    <a href="{{ url_for('dashboard') }}">고객사</a>
+    <a href="{{ url_for('global_settings') }}">설정</a>
+  </nav>
+  <div class="modes" title="메일 모드는 .env 에서 변경 (MAIL_MODE_OPERATOR / MAIL_MODE_CUSTOMER)">
+    {% if mode_operator == 'live' or mode_customer == 'live' %}
+      {% if mode_customer == 'live' %}<span class="badge b-live">고객사 메일 실발송</span>{% endif %}
+      {% if mode_operator == 'live' %}<span class="badge b-live">운영자 메일 실발송</span>{% endif %}
+    {% else %}<span class="badge b-dry">테스트 모드 · 메일은 파일로만 저장</span>{% endif %}
+  </div>
+</header>
+<main>
+  {% with msgs = get_flashed_messages(with_categories=true) %}
+    {% for cat, m in msgs %}<div class="flash {{ cat }}">{{ m }}</div>{% endfor %}
+  {% endwith %}
+  {% block body %}{% endblock %}
+</main>
+</body>
+</html>
